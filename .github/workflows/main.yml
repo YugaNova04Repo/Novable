@@ -14,7 +14,6 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # Upgraded to Node 20 to support 'styleText'
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -34,6 +33,10 @@ jobs:
 
       - name: Build Production Bundle
         run: npm run build
+
+      # Added step to initialize the Android platform in the CI environment
+      - name: Add Android Platform
+        run: npx cap add android
 
       - name: Build Android App (Capacitor/Cordova Example)
         run: npx cap sync android
