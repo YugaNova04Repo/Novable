@@ -34,9 +34,16 @@ jobs:
       - name: Build Production Bundle
         run: npm run build
 
-      # Initialize Capacitor config if missing, replacing 'com.example.app' with your desired package name if needed
-      - name: Initialize Capacitor Config
-        run: npx cap init Nova com.yuganova.nova --web-dir dist --yes
+      # Create capacitor.config.json directly to avoid interactive CLI prompts
+      - name: Create Capacitor Config
+        run: |
+          cat << EOF > capacitor.config.json
+          {
+            "appId": "com.yuganova.nova",
+            "appName": "Nova",
+            "webDir": "dist"
+          }
+          EOF
 
       - name: Add Android Platform
         run: npx cap add android
