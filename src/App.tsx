@@ -7,10 +7,11 @@ import { soundEngine } from './game/SoundEngine';
 import TitleScreen from './components/TitleScreen';
 import HibernationScreen from './components/HibernationScreen';
 import BlueprintsPage from './components/BlueprintsPage';
-import SystemModal from './components/SystemModal';
+import SystemModal, { FpsCapMode } from './components/SystemModal';
 import ChallengesModal from './components/ChallengesModal';
 import TimelineModal from './components/TimelineModal';
 import PhysicsLabModal from './components/PhysicsLabModal';
+import SpectroscopeModal from './components/SpectroscopeModal';
 import Header from './components/Header';
 import MilestoneWidget from './components/MilestoneWidget';
 import GameCanvas from './components/GameCanvas';
@@ -19,21 +20,52 @@ import InspectorModal from './components/InspectorModal';
 import DiscoveryToast from './components/DiscoveryToast';
 import EnvironmentalDeck from './components/EnvironmentalDeck';
 import Toolbelt from './components/Toolbelt';
+import TutorialOverlay from './components/TutorialOverlay';
+import PerformanceMonitor from './components/PerformanceMonitor';
 
 export default function App() {
   const [engine] = useState(() => new GameEngine());
   const [viewState, setViewState] = useState<ViewState>('title');
-  const [temp, setTemp] = useState<number>(15000);
-  const [pressure, setPressure] = useState<number>(50);
+  const [temp, setTemp] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('novagen_temp') || localStorage.getItem('genesis_temp');
+      return saved ? Number(saved) : 15000;
+    } catch {
+      return 15000;
+    }
+  });
+  const [pressure, setPressure] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('novagen_pressure') || localStorage.getItem('genesis_pressure');
+      return saved ? Number(saved) : 50;
+    } catch {
+      return 50;
+    }
+  });
+
   const [isPaused, setIsPaused] = useState<boolean>(false);
   const [timeWarp, setTimeWarp] = useState<number>(1);
   const [muted, setMuted] = useState<boolean>(false);
   const [universeAge, setUniverseAge] = useState<number>(0);
   const [kineticEnergy, setKineticEnergy] = useState<number>(0);
+  const [entropy, setEntropy] = useState<number>(0.0);
+  const [fpsCapMode, setFpsCapMode] = useState<FpsCapMode>('adaptive');
 
   // Active Toolbelt & Spawn brush
   const [activeTool, setActiveTool] = useState<ToolType>('grab');
   const [activeSpawnElementId, setActiveSpawnElementId] = useState<string>('hydrogen');
+  const [showPerfMonitor, setShowPerfMonitor] = useState<boolean>(true);
+
+  // Tutorial State (0 = completed/skipped, 1-5 active steps)
+  const [tutorialStep, setTutorialStep] = useState<number>(() => {
+    try {
+      const completed = localStorage.getItem('novagen_tutorial_completed') || localStorage.getItem('genesis_tutorial_completed');
+      if (completed === 'true') return 0;
+    } catch {
+      // Ignore
+    }
+    return 1;
+  });
 
   // Modals & Overlay Toggles
   const [showEnvDeck, setShowEnvDeck] = useState<boolean>(false);
@@ -43,6 +75,7 @@ export default function App() {
   const [showChallengesModal, setShowChallengesModal] = useState<boolean>(false);
   const [showTimelineModal, setShowTimelineModal] = useState<boolean>(false);
   const [showLabModal, setShowLabModal] = useState<boolean>(false);
+  const [showSpectroscopeModal, setShowSpectroscopeModal] = useState<boolean>(false);
   const [inspectElement, setInspectElement] = useState<ElementDefinition | null>(null);
   const [latestDiscovery, setLatestDiscovery] = useState<ElementDefinition | null>(null);
 
@@ -53,7 +86,7 @@ export default function App() {
   // Discovered set persistence
   const [discovered, setDiscovered] = useState<Set<string>>(() => {
     try {
-      const saved = localStorage.getItem('genesis_discovered');
+      const saved = localStorage.getItem('novagen_discovered') || localStorage.getItem('genesis_discovered');
       if (saved) return new Set(JSON.parse(saved));
     } catch {
       // Ignore
@@ -64,10 +97,21 @@ export default function App() {
   const discoveredCount = discovered.size;
   const currentEpoch = [...EPOCHS].reverse().find(e => discoveredCount >= e.requiredDiscoveries) || EPOCHS[0];
 
+  // Adaptive Hint Assistant State
+  const [showHintBanner, setShowHintBanner] = useState<boolean>(false);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (discovered.size <= 7) {
+        setShowHintBanner(true);
+      }
+    }, 20000);
+    return () => clearTimeout(timer);
+  }, [discovered.size]);
+
   // Milestones persistence
   const [milestones, setMilestones] = useState<Milestone[]>(() => {
     try {
-      const saved = localStorage.getItem('genesis_milestones');
+      const saved = localStorage.getItem('novagen_milestones') || localStorage.getItem('genesis_milestones');
       if (saved) {
         const completedIds: string[] = JSON.parse(saved);
         return MILESTONES.map(m => ({
@@ -89,25 +133,14 @@ export default function App() {
     }
   }, [milestones, engine]);
 
-  // Ambient & Generative Music effect
-  useEffect(() => {
-    if (!muted && viewState === 'crucible') {
-      soundEngine.startAmbient(temp);
-      soundEngine.startGenerativeMusic(currentEpoch.id);
-    } else {
-      soundEngine.stopAmbient();
-    }
-    soundEngine.updateAmbient(temp);
-  }, [temp, muted, viewState, currentEpoch.id]);
-
-  // Challenge timer loop
+  // Challenge Timer
   useEffect(() => {
     if (!activeChallenge || isPaused) return;
     const timer = setInterval(() => {
       setChallengeTimeLeft(t => {
         if (t <= 1) {
           clearInterval(timer);
-          alert(`Challenge Failed: Time expired for "${activeChallenge.title}"!`);
+          alert(`Challenge Time Expired: "${activeChallenge.title}". Try again!`);
           setActiveChallenge(null);
           return 0;
         }
@@ -124,9 +157,10 @@ export default function App() {
     if (count >= activeChallenge.targetCount) {
       alert(`Challenge Completed Successfully: "${activeChallenge.title}"!\nReward: ${activeChallenge.rewardText}`);
       try {
-        const saved = JSON.parse(localStorage.getItem('genesis_completed_challenges') || '[]');
+        const saved = JSON.parse(localStorage.getItem('novagen_completed_challenges') || localStorage.getItem('genesis_completed_challenges') || '[]');
         if (!saved.includes(activeChallenge.id)) {
           saved.push(activeChallenge.id);
+          localStorage.setItem('novagen_completed_challenges', JSON.stringify(saved));
           localStorage.setItem('genesis_completed_challenges', JSON.stringify(saved));
         }
       } catch {
@@ -136,24 +170,37 @@ export default function App() {
     }
   }, [engine.particles, activeChallenge]);
 
-  // Sync engine state loop
+  // Sync engine state loop with High Refresh Rate & FPS Governor support
   const [, setTick] = useState(0);
 
   useEffect(() => {
     let animId: number;
-    const updateLoop = () => {
+    let lastTime = performance.now();
+
+    const updateLoop = (now: number) => {
+      const deltaSec = (now - lastTime) / 1000;
+
+      if (fpsCapMode === '60fps' && deltaSec < 0.015) {
+        animId = requestAnimationFrame(updateLoop);
+        return;
+      }
+
+      lastTime = now;
+
       if (!isPaused && viewState === 'crucible') {
         setUniverseAge(engine.universeAge);
         setKineticEnergy(engine.getTotalKineticEnergy());
+        setEntropy(engine.calculateEntropy());
         engine.temp = temp;
         engine.pressure = pressure;
       }
       setTick(t => t + 1);
       animId = requestAnimationFrame(updateLoop);
     };
+
     animId = requestAnimationFrame(updateLoop);
     return () => cancelAnimationFrame(animId);
-  }, [engine, isPaused, viewState, temp, pressure]);
+  }, [engine, isPaused, viewState, temp, pressure, fpsCapMode]);
 
   // Handle discoveries
   const handleDiscover = (elementId: string) => {
@@ -163,6 +210,7 @@ export default function App() {
       next.add(elementId);
 
       try {
+        localStorage.setItem('novagen_discovered', JSON.stringify(Array.from(next)));
         localStorage.setItem('genesis_discovered', JSON.stringify(Array.from(next)));
       } catch {
         // Ignore
@@ -206,6 +254,7 @@ export default function App() {
       if (updated) {
         try {
           const completedIds = next.filter(m => m.completed).map(m => m.id);
+          localStorage.setItem('novagen_milestones', JSON.stringify(completedIds));
           localStorage.setItem('genesis_milestones', JSON.stringify(completedIds));
         } catch {
           // Ignore
@@ -218,9 +267,13 @@ export default function App() {
 
   const handleSaveNow = () => {
     try {
+      localStorage.setItem('novagen_discovered', JSON.stringify(Array.from(discovered)));
       localStorage.setItem('genesis_discovered', JSON.stringify(Array.from(discovered)));
+      localStorage.setItem('novagen_milestones', JSON.stringify(milestones.filter(m => m.completed).map(m => m.id)));
       localStorage.setItem('genesis_milestones', JSON.stringify(milestones.filter(m => m.completed).map(m => m.id)));
+      localStorage.setItem('novagen_temp', temp.toString());
       localStorage.setItem('genesis_temp', temp.toString());
+      localStorage.setItem('novagen_pressure', pressure.toString());
       localStorage.setItem('genesis_pressure', pressure.toString());
     } catch {
       // Ignore
@@ -240,7 +293,7 @@ export default function App() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `genesis-universe-save-${Math.floor(Date.now() / 1000)}.json`;
+    a.download = `novagen-universe-save-${Math.floor(Date.now() / 1000)}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -250,6 +303,7 @@ export default function App() {
       const data = JSON.parse(saveStr);
       if (data.discovered) {
         setDiscovered(new Set(data.discovered));
+        localStorage.setItem('novagen_discovered', JSON.stringify(data.discovered));
         localStorage.setItem('genesis_discovered', JSON.stringify(data.discovered));
       }
       if (data.milestones) {
@@ -257,6 +311,7 @@ export default function App() {
           ...m,
           completed: data.milestones.includes(m.id)
         })));
+        localStorage.setItem('novagen_milestones', JSON.stringify(data.milestones));
         localStorage.setItem('genesis_milestones', JSON.stringify(data.milestones));
       }
       if (data.temp) setTemp(data.temp);
@@ -276,7 +331,9 @@ export default function App() {
     setMilestones(MILESTONES);
     setActiveChallenge(null);
     try {
+      localStorage.removeItem('novagen_discovered');
       localStorage.removeItem('genesis_discovered');
+      localStorage.removeItem('novagen_milestones');
       localStorage.removeItem('genesis_milestones');
     } catch {
       // Ignore
@@ -299,7 +356,7 @@ export default function App() {
           setViewState('crucible');
         }}
         onOpenImport={() => {
-          const str = prompt('Paste your Genesis save JSON string here:');
+          const str = prompt('Paste your NovaGen save JSON string here:');
           if (str) handleImportString(str);
         }}
         onOpenBlueprints={() => {
@@ -330,7 +387,7 @@ export default function App() {
   }
 
   return (
-    <div className="flex flex-col h-screen w-screen overflow-hidden bg-[#07090E] select-none">
+    <div className="flex flex-col h-[100dvh] w-[100dvw] overflow-hidden bg-[#07090E] select-none">
       <Header
         currentEpoch={currentEpoch}
         discoveredCount={discovered.size}
@@ -339,6 +396,7 @@ export default function App() {
         pressure={pressure}
         universeAge={universeAge}
         kineticEnergy={kineticEnergy}
+        entropy={entropy}
         isPaused={isPaused}
         timeWarp={timeWarp}
         muted={muted}
@@ -411,9 +469,12 @@ export default function App() {
           showQuantumField={showQuantumField}
           showDebugPhysics={showDebugPhysics}
           onSpawnElement={(id, x, y) => engine.spawnParticle(id, x, y)}
+          onInspectElement={(el) => setInspectElement(el)}
+          onUseSpectroscope={() => setShowSpectroscopeModal(true)}
         />
 
         <CodexDock
+          engine={engine}
           discovered={discovered}
           activeSpawnElementId={activeSpawnElementId}
           onSelectSpawnElement={setActiveSpawnElementId}
@@ -468,11 +529,19 @@ export default function App() {
         />
       )}
 
+      {showSpectroscopeModal && (
+        <SpectroscopeModal
+          particles={engine.particles}
+          onClose={() => setShowSpectroscopeModal(false)}
+        />
+      )}
+
       {showSystemModal && (
         <SystemModal
           muted={muted}
           showQuantumField={showQuantumField}
           showDebugPhysics={showDebugPhysics}
+          fpsCapMode={fpsCapMode}
           onToggleMute={() => {
             const nextMuted = !muted;
             setMuted(nextMuted);
@@ -480,6 +549,7 @@ export default function App() {
           }}
           onToggleQuantumField={() => setShowQuantumField(q => !q)}
           onToggleDebugPhysics={() => setShowDebugPhysics(d => !d)}
+          onChangeFpsCapMode={setFpsCapMode}
           onSaveNow={handleSaveNow}
           onExportSave={handleExportSave}
           onImportString={handleImportString}
@@ -489,8 +559,45 @@ export default function App() {
             setShowSystemModal(false);
             setViewState('title');
           }}
+          onReplayTutorial={() => setTutorialStep(1)}
           onClose={() => setShowSystemModal(false)}
         />
+      )}
+
+      {tutorialStep > 0 && tutorialStep <= 5 && (
+        <TutorialOverlay
+          step={tutorialStep}
+          onNext={() => {
+            if (tutorialStep >= 5) {
+              setTutorialStep(0);
+              localStorage.setItem('novagen_tutorial_completed', 'true');
+              localStorage.setItem('genesis_tutorial_completed', 'true');
+            } else {
+              setTutorialStep(s => s + 1);
+            }
+          }}
+          onSkip={() => {
+            setTutorialStep(0);
+            localStorage.setItem('novagen_tutorial_completed', 'true');
+            localStorage.setItem('genesis_tutorial_completed', 'true');
+          }}
+        />
+      )}
+
+      {showHintBanner && (
+        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-40 bg-cyan-950/90 border border-cyan-500/50 backdrop-blur-md px-5 py-3 rounded-2xl text-cyan-200 font-mono text-xs flex items-center gap-4 shadow-2xl pointer-events-auto">
+          <span>Need help? Try dragging a Proton and Neutron together, or check the Codex Blueprints!</span>
+          <button
+            onClick={() => setShowHintBanner(false)}
+            className="px-3 py-1 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold"
+          >
+            Got it
+          </button>
+        </div>
+      )}
+
+      {showPerfMonitor && viewState === 'crucible' && (
+        <PerformanceMonitor engine={engine} onClose={() => setShowPerfMonitor(false)} />
       )}
     </div>
   );

@@ -11,12 +11,12 @@ interface Props {
 export function ResearchDataExporter({ engine }: { engine: GameEngine }) {
   const exportCSV = () => {
     soundEngine.playClick();
-    const headers = 'Timestamp (ms),Particle Count,Temperature (K),Pressure (GPa),Kinetic Energy (J)\n';
+    const headers = 'Timestamp (ms),Particle Count,Temperature (K),Pressure (GPa),Kinetic Energy (J),Entropy (S)\n';
     let rows = '';
     if (engine.snapshots.length > 0) {
-      rows = engine.snapshots.map(s => `${s.time},${s.particles.length},${s.temp},${s.pressure},${engine.getTotalKineticEnergy()}`).join('\n');
+      rows = engine.snapshots.map(s => `${s.time},${s.particles.length},${s.temp},${s.pressure},${engine.getTotalKineticEnergy()},${engine.calculateEntropy()}`).join('\n');
     } else {
-      rows = `0,${engine.particles.length},${engine.temp},${engine.pressure},${engine.getTotalKineticEnergy()}\n`;
+      rows = `0,${engine.particles.length},${engine.temp},${engine.pressure},${engine.getTotalKineticEnergy()},${engine.calculateEntropy()}\n`;
     }
 
     const blob = new Blob([headers + rows], { type: 'text/csv;charset=utf-8;' });
@@ -35,7 +35,7 @@ export function ResearchDataExporter({ engine }: { engine: GameEngine }) {
         <span>Research Data Exporter (CSV)</span>
       </div>
       <p className="text-white/60 text-[11px] font-sans">
-        Export real-time simulation state variables (temperature, pressure, particle counts, and kinetic energy) into a downloadable CSV file format for external scientific analysis.
+        Export real-time simulation state variables (temperature, pressure, particle counts, kinetic energy, and Boltzmann entropy) into a downloadable CSV file format.
       </p>
       <button
         onClick={exportCSV}
@@ -49,8 +49,9 @@ export function ResearchDataExporter({ engine }: { engine: GameEngine }) {
 }
 
 export default function PhysicsLabModal({ engine, onClose }: Props) {
-  const [gravScale, setGravScale] = useState<number>(1.0);
-  const [thermalScale, setThermalScale] = useState<number>(1.0);
+  const [gravScale, setGravScale] = useState<number>(engine.gravScale);
+  const [emScale, setEmScale] = useState<number>(engine.emScale);
+  const [thermalScale, setThermalScale] = useState<number>(engine.thermalScale);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4 pointer-events-auto">
@@ -83,8 +84,31 @@ export default function PhysicsLabModal({ engine, onClose }: Props) {
               max="5.0"
               step="0.1"
               value={gravScale}
-              onChange={(e) => setGravScale(Number(e.target.value))}
+              onChange={(e) => {
+                const val = Number(e.target.value);
+                setGravScale(val);
+                engine.gravScale = val;
+              }}
               className="w-full accent-cyan-400 cursor-pointer"
+            />
+          </div>
+
+          <div className="space-y-2 pt-2 border-t border-white/10">
+            <div className="flex justify-between">
+              <span>Fine-Structure EM Scale (Coulomb Force): {emScale.toFixed(2)}x</span>
+            </div>
+            <input
+              type="range"
+              min="0.1"
+              max="5.0"
+              step="0.1"
+              value={emScale}
+              onChange={(e) => {
+                const val = Number(e.target.value);
+                setEmScale(val);
+                engine.emScale = val;
+              }}
+              className="w-full accent-fuchsia-400 cursor-pointer"
             />
           </div>
 
@@ -101,7 +125,7 @@ export default function PhysicsLabModal({ engine, onClose }: Props) {
               onChange={(e) => {
                 const val = Number(e.target.value);
                 setThermalScale(val);
-                engine.temp *= val;
+                engine.thermalScale = val;
               }}
               className="w-full accent-amber-400 cursor-pointer"
             />

@@ -1,19 +1,24 @@
 import React, { useState } from 'react';
-import { X, Save, Download, Upload, RotateCcw, Volume2, VolumeX, LogOut, Check } from 'lucide-react';
+import { X, Save, Download, Upload, RotateCcw, Volume2, VolumeX, LogOut, Check, HelpCircle, Gauge, Cpu } from 'lucide-react';
 import { soundEngine } from '../game/SoundEngine';
+
+export type FpsCapMode = 'adaptive' | '60fps' | 'uncapped';
 
 interface Props {
   muted: boolean;
   showQuantumField: boolean;
   showDebugPhysics: boolean;
+  fpsCapMode: FpsCapMode;
   onToggleMute: () => void;
   onToggleQuantumField: () => void;
   onToggleDebugPhysics: () => void;
+  onChangeFpsCapMode: (mode: FpsCapMode) => void;
   onSaveNow: () => void;
   onExportSave: () => void;
   onImportString: (saveStr: string) => void;
   onResetUniverse: () => void;
   onReturnToTitle: () => void;
+  onReplayTutorial: () => void;
   onClose: () => void;
 }
 
@@ -21,14 +26,17 @@ export default function SystemModal({
   muted,
   showQuantumField,
   showDebugPhysics,
+  fpsCapMode,
   onToggleMute,
   onToggleQuantumField,
   onToggleDebugPhysics,
+  onChangeFpsCapMode,
   onSaveNow,
   onExportSave,
   onImportString,
   onResetUniverse,
   onReturnToTitle,
+  onReplayTutorial,
   onClose
 }: Props) {
   const [importInput, setImportInput] = useState('');
@@ -44,7 +52,7 @@ export default function SystemModal({
           <X size={18} />
         </button>
 
-        <h2 className="text-xl font-bold mb-6">System & Universe Settings</h2>
+        <h2 className="text-xl font-bold mb-6">NovaGen System & Engine Settings</h2>
 
         <div className="space-y-6 font-mono text-xs">
           {/* Save & Export */}
@@ -103,6 +111,49 @@ export default function SystemModal({
             </div>
           </div>
 
+          {/* High Refresh Rate & Engine Settings */}
+          <div className="space-y-2">
+            <div className="text-white/40 uppercase tracking-wider text-[10px]">High Refresh Rate & Engine Performance</div>
+            <div className="bg-white/5 border border-white/5 p-4 rounded-xl space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="flex items-center gap-2 text-cyan-300 font-bold">
+                  <Cpu size={16} />
+                  <span>Refresh Rate Governor</span>
+                </span>
+                <span className="text-[10px] text-white/50 uppercase">{fpsCapMode}</span>
+              </div>
+              <p className="text-[11px] text-white/60 font-sans">
+                Optimize frame pacing for 120Hz/144Hz+ HRR displays or throttle to 60 FPS cap to conserve mobile battery.
+              </p>
+              <div className="grid grid-cols-3 gap-2 pt-2">
+                <button
+                  onClick={() => { soundEngine.playClick(); onChangeFpsCapMode('adaptive'); }}
+                  className={`py-2 rounded-lg border text-center transition-all ${
+                    fpsCapMode === 'adaptive' ? 'bg-cyan-500/20 border-cyan-500 text-cyan-300 font-bold' : 'bg-white/5 border-white/10 text-white/60'
+                  }`}
+                >
+                  Adaptive HRR
+                </button>
+                <button
+                  onClick={() => { soundEngine.playClick(); onChangeFpsCapMode('60fps'); }}
+                  className={`py-2 rounded-lg border text-center transition-all ${
+                    fpsCapMode === '60fps' ? 'bg-cyan-500/20 border-cyan-500 text-cyan-300 font-bold' : 'bg-white/5 border-white/10 text-white/60'
+                  }`}
+                >
+                  60 FPS Cap
+                </button>
+                <button
+                  onClick={() => { soundEngine.playClick(); onChangeFpsCapMode('uncapped'); }}
+                  className={`py-2 rounded-lg border text-center transition-all ${
+                    fpsCapMode === 'uncapped' ? 'bg-cyan-500/20 border-cyan-500 text-cyan-300 font-bold' : 'bg-white/5 border-white/10 text-white/60'
+                  }`}
+                >
+                  Uncapped 144Hz+
+                </button>
+              </div>
+            </div>
+          </div>
+
           {/* Visual & Audio Preferences */}
           <div className="space-y-2">
             <div className="text-white/40 uppercase tracking-wider text-[10px]">Visual & Audio Preferences</div>
@@ -154,12 +205,12 @@ export default function SystemModal({
             <div className="flex items-center justify-between bg-cyan-950/20 border border-cyan-500/30 p-4 rounded-xl">
               <div>
                 <div className="font-bold text-cyan-300">PWA Offline Standalone Mode</div>
-                <div className="text-[10px] text-white/50 mt-0.5">Install Genesis as a native app on your home screen</div>
+                <div className="text-[10px] text-white/50 mt-0.5">Install NovaGen as a native app on your home screen</div>
               </div>
               <button
                 onClick={() => {
                   soundEngine.playClick();
-                  alert('To install Genesis offline:\n1. Tap your browser menu or share icon.\n2. Select "Add to Home Screen" or "Install App".\nEnjoy 100% offline standalone simulation!');
+                  alert('To install NovaGen v0.0.4 offline:\n1. Tap your browser menu or share icon.\n2. Select "Add to Home Screen" or "Install App".\nEnjoy 100% offline standalone simulation!');
                 }}
                 className="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold"
               >
@@ -173,6 +224,18 @@ export default function SystemModal({
             <button
               onClick={() => {
                 soundEngine.playClick();
+                onReplayTutorial();
+                onClose();
+              }}
+              className="w-full py-3 rounded-xl bg-cyan-600/20 border border-cyan-500/40 hover:bg-cyan-600/30 text-cyan-300 font-bold flex items-center justify-center gap-2 transition-all"
+            >
+              <HelpCircle size={16} />
+              <span>Replay Guided Onboarding Tutorial</span>
+            </button>
+
+            <button
+              onClick={() => {
+                soundEngine.playClick();
                 onReturnToTitle();
               }}
               className="w-full py-3 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 text-white font-bold flex items-center justify-center gap-2 transition-all"
@@ -183,7 +246,7 @@ export default function SystemModal({
 
             <button
               onClick={() => {
-                if (window.confirm('Are you sure you want to trigger a Big Crunch? All progress will be wiped!')) {
+                if (window.confirm('Are you sure you want to trigger a Big Crunch? All NovaGen progress will be wiped!')) {
                   onResetUniverse();
                   onClose();
                 }

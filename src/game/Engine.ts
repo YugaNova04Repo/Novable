@@ -1,52 +1,60 @@
-import { Particle, FloatingText, Shockwave, ToolType, ElementDefinition } from './types';
+import { Particle, ReactionRule, FloatingText, Shockwave, UniverseSnapshot, ElementDefinition, ToolType } from './types';
 import { ELEMENTS, REACTION_RULES } from './constants';
 import { soundEngine } from './SoundEngine';
 
-class SpatialHashGrid {
-  cellSize: number;
-  cells: Map<string, Particle[]> = new Map();
+export type { UniverseSnapshot };
 
-  constructor(cellSize: number = 60) {
+export class SpatialHashGrid {
+  cellSize: number;
+  buckets: Map<string, Particle[]>;
+
+  constructor(cellSize: number = 65) {
     this.cellSize = cellSize;
+    this.buckets = new Map();
   }
 
   clear() {
-    this.cells.clear();
+    this.buckets.clear();
   }
 
-  insert(particle: Particle) {
-    const key = `${Math.floor(particle.x / this.cellSize)}_${Math.floor(particle.y / this.cellSize)}`;
-    let bucket = this.cells.get(key);
+  getKey(x: number, y: number): string {
+    const cx = Math.floor(x / this.cellSize);
+    const cy = Math.floor(y / this.cellSize);
+    return `${cx},${cy}`;
+  }
+
+  insert(p: Particle) {
+    const key = this.getKey(p.x, p.y);
+    let bucket = this.buckets.get(key);
     if (!bucket) {
       bucket = [];
-      this.cells.set(key, bucket);
+      this.buckets.set(key, bucket);
     }
-    bucket.push(particle);
+    bucket.push(p);
   }
 
-  getNearby(particle: Particle): Particle[] {
-    const cx = Math.floor(particle.x / this.cellSize);
-    const cy = Math.floor(particle.y / this.cellSize);
+  getNearby(p: Particle): Particle[] {
     const nearby: Particle[] = [];
-    for (let x = cx - 1; x <= cx + 1; x++) {
-      for (let y = cy - 1; y <= cy + 1; y++) {
-        const bucket = this.cells.get(`${x}_${y}`);
+    const minCx = Math.floor((p.x - p.radius) / this.cellSize);
+    const maxCx = Math.floor((p.x + p.radius) / this.cellSize);
+    const minCy = Math.floor((p.y - p.radius) / this.cellSize);
+    const maxCy = Math.floor((p.y + p.radius) / this.cellSize);
+
+    for (let cx = minCx; cx <= maxCx; cx++) {
+      for (let cy = minCy; cy <= maxCy; cy++) {
+        const key = `${cx},${cy}`;
+        const bucket = this.buckets.get(key);
         if (bucket) {
-          for (const p of bucket) {
-            if (p.id !== particle.id) nearby.push(p);
+          for (const other of bucket) {
+            if (other.id !== p.id) {
+              nearby.push(other);
+            }
           }
         }
       }
     }
     return nearby;
   }
-}
-
-export interface UniverseSnapshot {
-  time: number;
-  particles: { elementId: string; x: number; y: number; vx: number; vy: number; mass: number; temp: number }[];
-  temp: number;
-  pressure: number;
 }
 
 export class GameEngine {
@@ -60,7 +68,12 @@ export class GameEngine {
   temp: number = 15000;
   timeWarp: number = 1;
   isPaused: boolean = false;
-  hasFusionCatalyst: boolean = false; // Milestone 3 buff
+  hasFusionCatalyst: boolean = false;
+
+  // Physics Lab Constants
+  gravScale: number = 1.0;
+  emScale: number = 1.0;
+  thermalScale: number = 1.0;
 
   // Active Toolbelt
   activeTool: ToolType = 'grab';
@@ -73,18 +86,21 @@ export class GameEngine {
   // Selection & Lasso Stamp
   lassoStart: { x: number; y: number } | null = null;
   lassoEnd: { x: number; y: number } | null = null;
-  customStamps: { id: string; name: string; elements: string[] }[] = [];
+  customStamps: { id: string; name: string; code: string; elements: string[] }[] = [];
 
   // Time-Rewind Snapshot Buffer (30 slots)
   snapshots: UniverseSnapshot[] = [];
   snapshotTimer: number = 0;
+
+  // High-Refresh-Rate (HRR) Delta-Time Tracking
+  lastFrameTimestamp: number = 0;
 
   // Callbacks
   onDiscover?: (elementId: string) => void;
 
   constructor() {
     try {
-      const savedStamps = localStorage.getItem('genesis_custom_stamps');
+      const savedStamps = localStorage.getItem('novagen_custom_stamps') || localStorage.getItem('genesis_custom_stamps');
       if (savedStamps) {
         this.customStamps = JSON.parse(savedStamps);
       }
@@ -99,6 +115,26 @@ export class GameEngine {
     this.shockwaves = [];
     this.universeAge = 0;
     this.snapshots = [];
+  }
+
+  initiateBigBang(width: number = 1000, height: number = 800) {
+    this.init();
+    this.temp = 50000;
+    this.pressure = 100;
+    const cx = width / 2;
+    const cy = height / 2;
+    for (let i = 0; i < 30; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = Math.random() * 12 + 2;
+      const vx = Math.cos(angle) * speed;
+      const vy = Math.sin(angle) * speed;
+      const types = ['energy_packet', 'up_quark', 'down_quark', 'electron'];
+      const chosen = types[Math.floor(Math.random() * types.length)];
+      this.spawnParticle(chosen, cx + (Math.random() - 0.5) * 20, cy + (Math.random() - 0.5) * 20, vx, vy);
+    }
+    this.addShockwave(cx, cy, '#FF00FE', 400);
+    this.addFloatingText('BIG BANG (T=0)', cx, cy - 30, '#00F0FF');
+    soundEngine.playBigBang();
   }
 
   spawnParticle(elementId: string, x: number, y: number, customVx?: number, customVy?: number) {
@@ -122,42 +158,21 @@ export class GameEngine {
     });
   }
 
-  initiateBigBang(width: number, height: number) {
-    this.init();
-    this.temp = 30000;
-    this.pressure = 50;
-    soundEngine.playBigBang();
-    this.addShockwave(width / 2, height / 2, '#00F0FF');
-
-    const cx = width / 2;
-    const cy = height / 2;
-    for (let i = 0; i < 35; i++) {
-      const angle = Math.random() * Math.PI * 2;
-      const speed = 2 + Math.random() * 5;
-      this.spawnParticle('up_quark', cx, cy, Math.cos(angle) * speed, Math.sin(angle) * speed);
-    }
-    for (let i = 0; i < 35; i++) {
-      const angle = Math.random() * Math.PI * 2;
-      const speed = 2 + Math.random() * 5;
-      this.spawnParticle('down_quark', cx, cy, Math.cos(angle) * speed, Math.sin(angle) * speed);
-    }
-    for (let i = 0; i < 25; i++) {
-      const angle = Math.random() * Math.PI * 2;
-      const speed = 3 + Math.random() * 6;
-      this.spawnParticle('electron', cx, cy, Math.cos(angle) * speed, Math.sin(angle) * speed);
-    }
-    for (let i = 0; i < 15; i++) {
-      const angle = Math.random() * Math.PI * 2;
-      const speed = 1 + Math.random() * 3;
-      this.spawnParticle('energy_packet', cx, cy, Math.cos(angle) * speed, Math.sin(angle) * speed);
-    }
-
-    this.addFloatingText('Big Bang Initialized! T = 0', cx, cy - 40, '#00F0FF');
+  addShockwave(x: number, y: number, color: string, maxRadius: number = 180) {
+    this.shockwaves.push({
+      id: Math.random().toString(36).substring(2, 8),
+      x,
+      y,
+      radius: 5,
+      maxRadius,
+      color,
+      opacity: 1.0
+    });
   }
 
-  addFloatingText(text: string, x: number, y: number, color: string = '#ffffff') {
+  addFloatingText(text: string, x: number, y: number, color: string = '#00F0FF') {
     this.floatingTexts.push({
-      id: Math.random().toString(36),
+      id: Math.random().toString(36).substring(2, 8),
       text,
       x,
       y,
@@ -167,25 +182,11 @@ export class GameEngine {
     });
   }
 
-  addShockwave(x: number, y: number, color: string = '#ffffff', maxRadius: number = 180) {
-    this.shockwaves.push({
-      id: Math.random().toString(36),
-      x,
-      y,
-      radius: 5,
-      maxRadius,
-      color,
-      opacity: 0.8
-    });
-  }
-
   getTotalKineticEnergy(): number {
-    let ke = 0;
-    for (const p of this.particles) {
-      const vSq = p.vx * p.vx + p.vy * p.vy;
-      ke += 0.5 * p.mass * vSq;
-    }
-    return ke;
+    return this.particles.reduce((acc, p) => {
+      const speedSq = p.vx * p.vx + p.vy * p.vy;
+      return acc + 0.5 * p.mass * speedSq;
+    }, 0);
   }
 
   saveSnapshot() {
@@ -213,7 +214,7 @@ export class GameEngine {
     this.universeAge = snap.time;
     this.temp = snap.temp;
     this.pressure = snap.pressure;
-    this.particles = snap.particles.map(sp => {
+    this.particles = snap.particles.map((sp: UniverseSnapshot['particles'][number]) => {
       const def = ELEMENTS[sp.elementId];
       return {
         id: Math.random().toString(36).substring(2, 9),
@@ -234,29 +235,73 @@ export class GameEngine {
   }
 
   saveCustomStamp(name: string, rect: { x1: number; y1: number; x2: number; y2: number }) {
-    const matched = this.particles.filter(p => 
-      p.x >= Math.min(rect.x1, rect.x2) && p.x <= Math.max(rect.x1, rect.x2) &&
-      p.y >= Math.min(rect.y1, rect.y2) && p.y <= Math.max(rect.y1, rect.y2)
-    );
+    const minX = Math.min(rect.x1, rect.x2);
+    const maxX = Math.max(rect.x1, rect.x2);
+    const minY = Math.min(rect.y1, rect.y2);
+    const maxY = Math.max(rect.y1, rect.y2);
+    
+    const matched = this.particles.filter(p => p.x >= minX && p.x <= maxX && p.y >= minY && p.y <= maxY);
     if (matched.length === 0) return;
+
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+
+    const relParticles = matched.map(p => ({
+      elementId: p.elementId,
+      dx: p.x - centerX,
+      dy: p.y - centerY
+    }));
+
+    const rawData = JSON.stringify({
+      name: name || `Assembly #${this.customStamps.length + 1}`,
+      particles: relParticles
+    });
+
+    const code = 'GEN-STAMP-' + btoa(rawData);
 
     const stamp = {
       id: Math.random().toString(36).substring(2, 8),
-      name: name || `Stamp #${this.customStamps.length + 1}`,
-      elements: matched.map(p => p.elementId)
+      name: name || `Assembly #${this.customStamps.length + 1}`,
+      code,
+      elements: Array.from(new Set(matched.map(p => p.elementId)))
     };
+
     this.customStamps.push(stamp);
     try {
+      localStorage.setItem('novagen_custom_stamps', JSON.stringify(this.customStamps));
       localStorage.setItem('genesis_custom_stamps', JSON.stringify(this.customStamps));
     } catch {
       // Ignore
     }
   }
 
-  update(width: number, height: number) {
+  importStampCode(codeStr: string, spawnX: number, spawnY: number): boolean {
+    try {
+      const clean = codeStr.replace('GEN-STAMP-', '').trim();
+      const decoded = JSON.parse(atob(clean));
+      if (decoded.particles && Array.isArray(decoded.particles)) {
+        decoded.particles.forEach((p: { elementId: string; dx: number; dy: number }) => {
+          this.spawnParticle(p.elementId, spawnX + p.dx, spawnY + p.dy);
+        });
+        return true;
+      }
+    } catch {
+      // Ignore
+    }
+    return false;
+  }
+
+  update(width: number, height: number, customDeltaSec?: number) {
     if (this.isPaused) return;
 
-    const dt = 0.016 * this.timeWarp;
+    const now = performance.now();
+    let rawDeltaSec = customDeltaSec ?? (this.lastFrameTimestamp > 0 ? (now - this.lastFrameTimestamp) / 1000 : 0.016);
+    this.lastFrameTimestamp = now;
+
+    if (rawDeltaSec <= 0 || rawDeltaSec > 0.05) rawDeltaSec = 0.016;
+
+    const timeFactor = rawDeltaSec / 0.016;
+    const dt = rawDeltaSec * this.timeWarp;
     this.universeAge += dt * 1000;
 
     // Snapshot timer (every 5 seconds)
@@ -268,20 +313,20 @@ export class GameEngine {
 
     // Floating text update
     this.floatingTexts.forEach(ft => {
-      ft.life++;
-      ft.y -= 0.6;
+      ft.life += timeFactor;
+      ft.y -= 0.6 * timeFactor;
     });
     this.floatingTexts = this.floatingTexts.filter(ft => ft.life < ft.maxLife);
 
     // Shockwaves update
     this.shockwaves.forEach(sw => {
-      sw.radius += 5 * this.timeWarp;
-      sw.opacity -= 0.025 * this.timeWarp;
+      sw.radius += 5 * this.timeWarp * timeFactor;
+      sw.opacity -= 0.025 * this.timeWarp * timeFactor;
     });
     this.shockwaves = this.shockwaves.filter(sw => sw.opacity > 0);
 
-    // Apply mutual physical forces (gravitational & electromagnetic interactions)
-    this.applyMutualForces();
+    // Apply mutual physical forces & gravity well
+    this.applyMutualForces(timeFactor);
 
     // Populate Spatial Hash Grid for O(N) collision detection
     this.spatialGrid.clear();
@@ -291,19 +336,33 @@ export class GameEngine {
 
     // Update particles & check collisions via Spatial Hash Grid
     this.particles.forEach(p => {
-      p.temp = this.temp;
+      p.temp = this.temp * this.thermalScale;
+
+      // Real Phase Transitions
+      const def = ELEMENTS[p.elementId];
+      if (p.temp > 10000) {
+        p.state = 'plasma';
+      } else if (def?.boilingPoint && p.temp >= def.boilingPoint) {
+        p.state = 'gas';
+      } else if (def?.meltingPoint && p.temp >= def.meltingPoint) {
+        p.state = 'liquid';
+      } else if (def?.meltingPoint && p.temp < def.meltingPoint) {
+        p.state = 'solid';
+      } else {
+        p.state = p.temp > 3000 ? 'gas' : 'solid';
+      }
 
       if (!p.trail) p.trail = [];
       p.trail.unshift({ x: p.x, y: p.y });
       if (p.trail.length > 8) p.trail.pop();
 
       // Position update
-      p.x += p.vx * this.timeWarp;
-      p.y += p.vy * this.timeWarp;
+      p.x += p.vx * this.timeWarp * timeFactor;
+      p.y += p.vy * this.timeWarp * timeFactor;
 
       // Friction / Damping
-      p.vx *= 0.992;
-      p.vy *= 0.992;
+      p.vx *= Math.pow(0.992, timeFactor);
+      p.vy *= Math.pow(0.992, timeFactor);
 
       // Wall bounce
       const margin = p.radius;
@@ -325,6 +384,25 @@ export class GameEngine {
         const minDist = p.radius + p2.radius;
 
         if (dist < minDist) {
+          // Matter-Antimatter Annihilation Check
+          const isElectronPositron = (p.elementId === 'electron' && p2.elementId === 'positron') || (p.elementId === 'positron' && p2.elementId === 'electron');
+          const isProtonAntiproton = (p.elementId === 'proton' && p2.elementId === 'antiproton') || (p.elementId === 'antiproton' && p2.elementId === 'proton');
+          
+          if (isElectronPositron || isProtonAntiproton) {
+            consumedIds.add(p.id);
+            consumedIds.add(p2.id);
+
+            const midX = (p.x + p2.x) / 2;
+            const midY = (p.y + p2.y) / 2;
+
+            this.spawnParticle('photon', midX - 8, midY, -10, (Math.random() - 0.5) * 6);
+            this.spawnParticle('energy_packet', midX + 8, midY, 10, (Math.random() - 0.5) * 6);
+            this.addShockwave(midX, midY, '#EC4899', 300);
+            this.addFloatingText('E = mc² Annihilation!', midX, midY - 20, '#FF00FE');
+            soundEngine.playBigBang();
+            break;
+          }
+
           // Elastic collision bounce
           const nx = dx / (dist || 1);
           const ny = dy / (dist || 1);
@@ -378,83 +456,40 @@ export class GameEngine {
 
               this.spawnParticle(matchedRule.output, midX, midY, (p.vx + p2.vx) / 2, (p.vy + p2.vy) / 2);
               this.addShockwave(midX, midY, ELEMENTS[matchedRule.output]?.color || '#ffffff');
-              this.addFloatingText(`+${ELEMENTS[matchedRule.output]?.name || matchedRule.output}!`, midX, midY - 15, '#00F0FF');
+              this.addFloatingText(`Synthesis: ${ELEMENTS[matchedRule.output]?.name || matchedRule.output}!`, midX, midY - 20, '#FACC15');
               soundEngine.playDiscovery();
 
               if (this.onDiscover) {
                 this.onDiscover(matchedRule.output);
               }
-            } else {
-              // Diagnostic failure micro-label
-              p.failedReason = !tempOk ? (this.temp > (matchedRule.maxTemp || 1e9) ? 'Too Hot!' : 'Too Cold!') : 'Need Pressure!';
+              break;
             }
           }
         }
       }
     });
 
-    this.particles = this.particles.filter(p => !consumedIds.has(p.id));
-    this.checkComplexReactions();
-  }
-
-  private checkComplexReactions() {
-    const complexRules = REACTION_RULES.filter(r => r.inputs.length >= 3);
-    if (complexRules.length === 0 || this.particles.length < 3) return;
-
-    for (const rule of complexRules) {
-      const inputCounts: Record<string, number> = {};
-      rule.inputs.forEach(id => {
-        inputCounts[id] = (inputCounts[id] || 0) + 1;
-      });
-
-      let matchedParticles: Particle[] = [];
-      const usedIds = new Set<string>();
-
-      let allFound = true;
-      for (const [reqId, count] of Object.entries(inputCounts)) {
-        const found = this.particles.filter(p => p.elementId === reqId && !usedIds.has(p.id));
-        if (found.length >= count) {
-          for (let i = 0; i < count; i++) {
-            matchedParticles.push(found[i]);
-            usedIds.add(found[i].id);
-          }
-        } else {
-          allFound = false;
-          break;
-        }
-      }
-
-      if (allFound && matchedParticles.length > 0) {
-        const catalystMultiplier = this.hasFusionCatalyst ? 1.35 : 1.0;
-        const tempOk = 
-          (!rule.minTemp || this.temp >= rule.minTemp / catalystMultiplier) &&
-          (!rule.maxTemp || this.temp <= rule.maxTemp * catalystMultiplier);
-        const pressureOk =
-          (!rule.minPressure || this.pressure >= rule.minPressure) &&
-          (!rule.maxPressure || this.pressure <= rule.maxPressure);
-
-        if (tempOk && pressureOk) {
-          const avgX = matchedParticles.reduce((acc, p) => acc + p.x, 0) / matchedParticles.length;
-          const avgY = matchedParticles.reduce((acc, p) => acc + p.y, 0) / matchedParticles.length;
-
-          const removeSet = new Set(matchedParticles.map(p => p.id));
-          this.particles = this.particles.filter(p => !removeSet.has(p.id));
-
-          this.spawnParticle(rule.output, avgX, avgY);
-          this.addShockwave(avgX, avgY, ELEMENTS[rule.output]?.color || '#FACC15');
-          this.addFloatingText(`Synthesis: ${ELEMENTS[rule.output]?.name}!`, avgX, avgY - 20, '#FACC15');
-          soundEngine.playDiscovery();
-
-          if (this.onDiscover) {
-            this.onDiscover(rule.output);
-          }
-          break;
-        }
-      }
+    // Remove consumed particles
+    if (consumedIds.size > 0) {
+      this.particles = this.particles.filter(p => !consumedIds.has(p.id));
     }
   }
 
-  applyMutualForces() {
+  applyMutualForces(timeFactor: number = 1.0) {
+    // Gravity Well (Attractor Tool)
+    if (this.isAttracting) {
+      this.particles.forEach(p => {
+        const dx = this.attractX - p.x;
+        const dy = this.attractY - p.y;
+        const distSq = dx * dx + dy * dy + 100;
+        const dist = Math.sqrt(distSq);
+        const force = (800 * this.gravScale * timeFactor) / distSq;
+        p.vx += (dx / dist) * force;
+        p.vy += (dy / dist) * force;
+      });
+    }
+
+    // Mutual Gravitational and Electromagnetic Forces
     for (let i = 0; i < this.particles.length; i++) {
       for (let j = i + 1; j < this.particles.length; j++) {
         const p1 = this.particles[i];
@@ -464,8 +499,8 @@ export class GameEngine {
         const distSq = dx * dx + dy * dy + 100;
         const dist = Math.sqrt(distSq);
 
-        const gravForce = (p1.mass * p2.mass * 0.00004) / distSq;
-        const emForce = -(p1.charge * p2.charge * 0.4) / distSq;
+        const gravForce = (p1.mass * p2.mass * 0.00004 * this.gravScale * timeFactor) / distSq;
+        const emForce = -(p1.charge * p2.charge * 0.4 * this.emScale * timeFactor) / distSq;
 
         const totalForce = gravForce + emForce;
         const fx = (dx / dist) * totalForce;
@@ -477,5 +512,24 @@ export class GameEngine {
         p2.vy -= fy / p2.mass;
       }
     }
+  }
+
+  calculateEntropy(): number {
+    if (this.particles.length <= 1) return 0.0;
+    let avgVx = 0, avgVy = 0;
+    this.particles.forEach(p => { avgVx += p.vx; avgVy += p.vy; });
+    avgVx /= this.particles.length;
+    avgVy /= this.particles.length;
+
+    let velocityVariance = 0;
+    this.particles.forEach(p => {
+      const dvx = p.vx - avgVx;
+      const dvy = p.vy - avgVy;
+      velocityVariance += (dvx * dvx + dvy * dvy);
+    });
+    velocityVariance /= this.particles.length;
+
+    const entropy = Math.log(velocityVariance + 1) * (this.temp / 1000) * Math.min(5.0, this.particles.length * 0.1);
+    return Number(entropy.toFixed(2));
   }
 }

@@ -15,6 +15,9 @@ export interface ElementDefinition {
   unlockedByDefault?: boolean;
   quote?: string;
   quoteAuthor?: string;
+  discoverer?: string;
+  discoveryYear?: number;
+  historicalCitation?: string;
 }
 
 export interface Particle {
@@ -34,6 +37,21 @@ export interface Particle {
   maxLife?: number;
   trail?: { x: number; y: number }[];
   failedReason?: string;
+}
+
+export interface UniverseSnapshot {
+  time: number;
+  temp: number;
+  pressure: number;
+  particles: {
+    elementId: string;
+    x: number;
+    y: number;
+    vx: number;
+    vy: number;
+    mass: number;
+    temp: number;
+  }[];
 }
 
 export interface ReactionRule {
@@ -85,4 +103,4 @@ export interface Shockwave {
 }
 
 export type ViewState = 'title' | 'crucible' | 'blueprints' | 'hibernation';
-export type ToolType = 'grab' | 'attractor' | 'laser' | 'spawn' | 'inspector';
+export type ToolType = 'grab' | 'attractor' | 'laser' | 'cryo' | 'spawn' | 'inspector' | 'eraser' | 'spectroscope' | 'lasso';

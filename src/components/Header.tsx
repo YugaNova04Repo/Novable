@@ -1,7 +1,8 @@
 import React from 'react';
-import { Play, Pause, FastForward, RotateCcw, Volume2, VolumeX, Settings, Menu, Thermometer, Gauge, BookOpen, Trophy, Sliders } from 'lucide-react';
+import { Play, Pause, FastForward, RotateCcw, Volume2, VolumeX, Settings, Menu, Thermometer, Gauge, BookOpen, Trophy, Sliders, Camera } from 'lucide-react';
 import { Epoch } from '../game/types';
 import { soundEngine } from '../game/SoundEngine';
+import NovaGenLogo from './NovaGenLogo';
 
 interface Props {
   currentEpoch: Epoch;
@@ -11,6 +12,7 @@ interface Props {
   pressure: number;
   universeAge: number;
   kineticEnergy: number;
+  entropy: number;
   isPaused: boolean;
   timeWarp: number;
   muted: boolean;
@@ -35,6 +37,7 @@ export default function Header({
   pressure,
   universeAge,
   kineticEnergy,
+  entropy,
   isPaused,
   timeWarp,
   muted,
@@ -52,56 +55,77 @@ export default function Header({
 }: Props) {
   const progress = Math.min(100, (discoveredCount / currentEpoch.requiredDiscoveries) * 100);
 
-  const formatAge = (seconds: number) => {
-    if (seconds < 60) return `${Math.floor(seconds)}s`;
-    if (seconds < 3600) return `${(seconds / 60).toFixed(1)}m`;
-    return `${(seconds / 3600).toFixed(1)}h`;
+  const handleTakeSnapshot = () => {
+    soundEngine.playClick();
+    const canvas = document.querySelector('canvas');
+    if (!canvas) return;
+
+    // Create export composite canvas
+    const exportCanvas = document.createElement('canvas');
+    exportCanvas.width = canvas.width;
+    exportCanvas.height = canvas.height + 60;
+    const ctx = exportCanvas.getContext('2d');
+    if (!ctx) return;
+
+    // Draw main game canvas
+    ctx.drawImage(canvas, 0, 0);
+
+    // Draw bottom telemetry legend banner
+    ctx.fillStyle = '#0F141E';
+    ctx.fillRect(0, canvas.height, canvas.width, 60);
+
+    ctx.strokeStyle = '#00F0FF';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, canvas.height);
+    ctx.lineTo(canvas.width, canvas.height);
+    ctx.stroke();
+
+    ctx.fillStyle = '#00F0FF';
+    ctx.font = 'bold 14px monospace';
+    ctx.fillText(`NOVAGEN v0.0.4: THE QUANTUM & COSMIC RULE ENGINE — ${currentEpoch.title}`, 20, canvas.height + 25);
+
+    ctx.fillStyle = '#94A3B8';
+    ctx.font = '11px monospace';
+    ctx.fillText(`Temp: ${temp} K | Pressure: ${pressure.toFixed(1)} GPa | Entropy: ${entropy.toFixed(1)} k_B | Discovered: ${discoveredCount}/${totalElements}`, 20, canvas.height + 45);
+
+    const link = document.createElement('a');
+    link.download = `novagen-lab-snapshot-${Math.floor(Date.now() / 1000)}.png`;
+    link.href = exportCanvas.toDataURL('image/png');
+    link.click();
   };
 
   return (
-    <header className="relative z-20 bg-[#0F141E]/90 backdrop-blur-md border-b border-white/10 px-4 py-3 flex flex-wrap items-center justify-between gap-3 text-white">
-      {/* Left: Menu & Epoch */}
-      <div className="flex items-center gap-3">
+    <header className="relative z-30 w-full bg-[#0F141E]/90 backdrop-blur-md border-b border-white/10 px-3 sm:px-4 py-2 flex items-center justify-between text-white font-mono shadow-2xl select-none">
+      {/* Left: Brand & Cosmic Epoch Title */}
+      <div className="flex items-center gap-3 sm:gap-4">
         <button
           onClick={() => {
             soundEngine.playClick();
             onReturnToTitle();
           }}
-          title="Return to Main Menu"
-          className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 hover:text-white transition-all"
+          className="flex items-center hover:opacity-80 transition-opacity"
+          title="Return to NovaGen Title Screen"
         >
-          <Menu size={18} />
+          <NovaGenLogo size={32} showText={true} versionBadge="v0.0.4" />
         </button>
 
-        <div className="flex flex-col gap-1 min-w-[240px]">
-          <div className="flex items-center justify-between text-xs font-mono tracking-wider text-cyan-400">
-            <span>{currentEpoch.title}</span>
-            <span className="text-white/50">{currentEpoch.subtitle}</span>
+        <div className="hidden md:flex items-center gap-3 bg-white/5 border border-white/10 px-3 py-1.5 rounded-xl">
+          <div className="flex flex-col">
+            <span className="text-[9px] text-white/40 uppercase tracking-wider">{currentEpoch.subtitle}</span>
+            <span className="text-xs font-bold text-cyan-300">{currentEpoch.title}</span>
           </div>
-          <div className="w-full bg-white/10 h-1.5 rounded-full overflow-hidden">
+          <div className="w-20 bg-white/10 h-1.5 rounded-full overflow-hidden">
             <div 
-              className="bg-gradient-to-r from-cyan-500 to-fuchsia-500 h-full transition-all duration-500"
+              className="bg-gradient-to-r from-cyan-400 to-fuchsia-500 h-full transition-all duration-300"
               style={{ width: `${progress}%` }}
             />
           </div>
         </div>
       </div>
 
-      {/* Middle: Interactive Telemetry Bar */}
-      <div className="flex items-center gap-4 bg-black/40 px-4 py-1.5 rounded-xl border border-white/5 font-mono text-xs flex-wrap justify-center">
-        <button
-          onClick={() => {
-            soundEngine.playClick();
-            onOpenTimeline();
-          }}
-          className="flex flex-col text-left hover:bg-white/5 px-2 py-1 rounded-lg transition-all cursor-pointer group"
-          title="Open Timeline Scrubber (Time-Rewind)"
-        >
-          <span className="text-white/40 text-[10px]">TIME (T)</span>
-          <span className="text-cyan-300 font-bold group-hover:underline">{formatAge(universeAge)}</span>
-        </button>
-        <div className="w-px h-6 bg-white/10" />
-
+      {/* Middle: Real-time Telemetry readouts */}
+      <div className="hidden lg:flex items-center gap-4 text-xs">
         <button
           onClick={() => {
             soundEngine.playClick();
@@ -113,7 +137,7 @@ export default function Header({
           <Thermometer size={14} className="text-amber-400 group-hover:scale-110 transition-transform" />
           <div className="flex flex-col text-left">
             <span className="text-white/40 text-[10px]">TEMP</span>
-            <span className="font-bold text-amber-300">{temp.toLocaleString()} K</span>
+            <span className="font-bold text-amber-300">{temp > 10000 ? `${(temp / 1000).toFixed(1)}k` : temp} K</span>
           </div>
         </button>
 
@@ -142,13 +166,27 @@ export default function Header({
 
         <div className="w-px h-6 bg-white/10" />
         <div className="flex flex-col">
+          <span className="text-white/40 text-[10px]">ENTROPY (S)</span>
+          <span className="text-amber-300 font-bold">{entropy.toFixed(1)} k_B</span>
+        </div>
+
+        <div className="w-px h-6 bg-white/10" />
+        <div className="flex flex-col">
           <span className="text-white/40 text-[10px]">CODEX</span>
           <span className="text-green-300 font-bold">{discoveredCount} / {totalElements}</span>
         </div>
       </div>
 
       {/* Right: Quick Action Controls */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5 sm:gap-2">
+        <button
+          onClick={handleTakeSnapshot}
+          title="Export Lab Snapshot PNG"
+          className="p-2 rounded-lg bg-white/5 border border-white/10 hover:bg-cyan-500/20 hover:text-cyan-300 text-white/70 transition-all"
+        >
+          <Camera size={16} />
+        </button>
+
         <button
           onClick={() => {
             soundEngine.playClick();
@@ -193,7 +231,7 @@ export default function Header({
         <button
           onClick={onCycleTimeWarp}
           title="Time Warp"
-          className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 font-mono text-xs text-cyan-400 flex items-center gap-1.5"
+          className="px-2.5 py-1.5 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 font-mono text-xs text-cyan-400 flex items-center gap-1"
         >
           <FastForward size={14} />
           <span>{timeWarp}x</span>

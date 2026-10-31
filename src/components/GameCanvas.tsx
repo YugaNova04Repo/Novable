@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { GameEngine } from '../game/Engine';
-import { ELEMENTS, REACTION_RULES } from '../game/constants';
-import { ToolType } from '../game/types';
+import { ELEMENTS } from '../game/constants';
+import { ToolType, ElementDefinition } from '../game/types';
 import { ZoomIn } from 'lucide-react';
 import { soundEngine } from '../game/SoundEngine';
 
@@ -13,7 +13,8 @@ interface Props {
   showQuantumField?: boolean;
   showDebugPhysics?: boolean;
   onSpawnElement: (elementId: string, x: number, y: number) => void;
-  onInspectParticle?: (particleId: string) => void;
+  onInspectElement?: (element: ElementDefinition) => void;
+  onUseSpectroscope?: () => void;
 }
 
 export default function GameCanvas({
@@ -23,77 +24,80 @@ export default function GameCanvas({
   activeSpawnElementId,
   showQuantumField,
   showDebugPhysics,
-  onSpawnElement
+  onSpawnElement,
+  onInspectElement,
+  onUseSpectroscope
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [zoom, setZoom] = useState<number>(1.0);
   const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
-  const isDragging = useRef(false);
-  const lastTouchDist = useRef<number | null>(null);
+  const isDragging = useRef<boolean>(false);
+  const isLassoing = useRef<boolean>(false);
   const lastPanPos = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const lastTouchDist = useRef<number | null>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d', { alpha: false });
+    const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
     let animId: number;
 
+    const parent = canvas.parentElement;
     const resizeCanvas = () => {
-      const parent = canvas.parentElement;
       if (parent) {
-        canvas.width = parent.clientWidth;
-        canvas.height = parent.clientHeight;
+        const width = parent.clientWidth;
+        const height = parent.clientHeight;
+        if (canvas.width !== width || canvas.height !== height) {
+          canvas.width = width;
+          canvas.height = height;
+        }
       }
     };
     resizeCanvas();
-    window.addEventListener('resize', resizeCanvas);
+
+    let resizeObserver: ResizeObserver | null = null;
+    if (parent && typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(() => {
+        resizeCanvas();
+      });
+      resizeObserver.observe(parent);
+    } else {
+      window.addEventListener('resize', resizeCanvas);
+    }
 
     const render = () => {
       engine.update(canvas.width, canvas.height);
 
-      ctx.save();
-      // Background obsidian
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Deep Space Starfield & Cosmic Grid Background
       ctx.fillStyle = '#07090E';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // Camera transform (zoom & pan)
+      ctx.save();
       ctx.translate(canvas.width / 2 + pan.x, canvas.height / 2 + pan.y);
       ctx.scale(zoom, zoom);
       ctx.translate(-canvas.width / 2, -canvas.height / 2);
 
-      // Dynamic background heat haze tint based on temp
-      if (temp > 10000) {
-        const alpha = Math.min(0.2, (temp - 10000) / 500000);
-        ctx.fillStyle = `rgba(239, 68, 68, ${alpha})`;
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-      } else if (temp < 200) {
-        ctx.fillStyle = 'rgba(6, 182, 212, 0.08)';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-      }
-
-      // Quantum Field Probability Grid Layer
+      // Quantum Vacuum Field (Virtual particle fluctuations)
       if (showQuantumField) {
-        ctx.strokeStyle = 'rgba(0, 240, 255, 0.12)';
-        ctx.lineWidth = 0.75;
-        const qSize = 40;
-        const phase = engine.universeAge * 0.003;
-        ctx.beginPath();
-        for (let x = 0; x < canvas.width; x += qSize) {
-          for (let y = 0; y < canvas.height; y += qSize) {
-            const wave = Math.sin(x * 0.04 + phase) * Math.cos(y * 0.04 + phase) * 8;
-            ctx.strokeRect(x + wave, y + wave, qSize * 0.6, qSize * 0.6);
-          }
+        ctx.fillStyle = 'rgba(0, 240, 255, 0.03)';
+        for (let i = 0; i < 40; i++) {
+          const rx = (Math.sin(Date.now() * 0.001 + i) * 0.5 + 0.5) * canvas.width;
+          const ry = (Math.cos(Date.now() * 0.0015 + i * 2) * 0.5 + 0.5) * canvas.height;
+          ctx.beginPath();
+          ctx.arc(rx, ry, Math.sin(Date.now() * 0.005 + i) * 3 + 4, 0, Math.PI * 2);
+          ctx.fill();
         }
-        ctx.stroke();
       }
 
-      // Debug Physics Layer (Spatial Hash Grid cells & Particle Hitboxes)
+      // Spatial Hash Grid Overlay if Debug Physics is enabled
       if (showDebugPhysics) {
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+        ctx.strokeStyle = 'rgba(0, 255, 128, 0.15)';
         ctx.lineWidth = 1;
-        const cellSize = 65;
+        const cellSize = engine.spatialGrid.cellSize;
         for (let x = 0; x < canvas.width; x += cellSize) {
           ctx.beginPath();
           ctx.moveTo(x, 0);
@@ -106,44 +110,29 @@ export default function GameCanvas({
           ctx.lineTo(canvas.width, y);
           ctx.stroke();
         }
-
-        engine.particles.forEach(p => {
-          ctx.strokeStyle = '#00F0FF';
-          ctx.lineWidth = 1.2;
-          ctx.beginPath();
-          ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
-          ctx.stroke();
-
-          ctx.strokeStyle = '#FACC15';
-          ctx.beginPath();
-          ctx.moveTo(p.x, p.y);
-          ctx.lineTo(p.x + p.vx * 4, p.y + p.vy * 4);
-          ctx.stroke();
-        });
       }
 
-      // Warping Coordinate Grid based on particle mass proximity (spacetime curvature)
-      ctx.strokeStyle = '#162032';
-      ctx.lineWidth = 1;
-      const gridSize = 60;
-      const offsetX = (engine.universeAge * 0.04) % gridSize;
-      const offsetY = (engine.universeAge * 0.02) % gridSize;
+      // Gravitational Warped Coordinate Grid
+      const gridSize = 80;
+      const offsetX = (pan.x % gridSize);
+      const offsetY = (pan.y % gridSize);
 
       const getWarpedPoint = (gx: number, gy: number) => {
-        let dxSum = 0;
-        let dySum = 0;
-        for (const p of engine.particles) {
-          if (p.mass && p.mass > 15) {
-            const pdx = p.x - gx;
-            const pdy = p.y - gy;
-            const distSq = pdx * pdx + pdy * pdy + 2000;
-            const force = (p.mass * 300) / distSq;
-            dxSum += (pdx / Math.sqrt(distSq)) * force;
-            dySum += (pdy / Math.sqrt(distSq)) * force;
-          }
-        }
-        return { x: gx + dxSum, y: gy + dySum };
+        let wx = gx;
+        let wy = gy;
+        engine.particles.forEach(p => {
+          const dx = gx - p.x;
+          const dy = gy - p.y;
+          const distSq = dx * dx + dy * dy + 400;
+          const pull = (p.mass * 12) / distSq;
+          wx -= (dx / Math.sqrt(distSq)) * pull;
+          wy -= (dy / Math.sqrt(distSq)) * pull;
+        });
+        return { x: wx, y: wy };
       };
+
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
+      ctx.lineWidth = 1;
 
       for (let x = offsetX; x < canvas.width; x += gridSize) {
         ctx.beginPath();
@@ -165,6 +154,33 @@ export default function GameCanvas({
         ctx.stroke();
       }
 
+      // Keplerian Orbital Trajectory Predictor
+      if (zoom < 0.7 || engine.particles.some(p => ELEMENTS[p.elementId]?.category === 'astrophysics')) {
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.25)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3, 4]);
+
+        engine.particles.forEach(p => {
+          const def = ELEMENTS[p.elementId];
+          if (def?.category === 'astrophysics' || p.mass > 50) {
+            ctx.beginPath();
+            let curX = p.x;
+            let curY = p.y;
+            let curVx = p.vx;
+            let curVy = p.vy;
+
+            ctx.moveTo(curX, curY);
+            for (let step = 0; step < 25; step++) {
+              curX += curVx * 2;
+              curY += curVy * 2;
+              ctx.lineTo(curX, curY);
+            }
+            ctx.stroke();
+          }
+        });
+        ctx.setLineDash([]);
+      }
+
       // Reaction Zone Center Reticle
       const cx = canvas.width / 2;
       const cy = canvas.height / 2;
@@ -176,7 +192,7 @@ export default function GameCanvas({
       ctx.stroke();
       ctx.setLineDash([]);
 
-      // Draw Shockwaves
+      // Draw Expanding & Fading Collision Rings / Shockwaves
       engine.shockwaves.forEach(sw => {
         ctx.strokeStyle = sw.color;
         ctx.globalAlpha = sw.opacity;
@@ -184,6 +200,14 @@ export default function GameCanvas({
         ctx.beginPath();
         ctx.arc(sw.x, sw.y, sw.radius, 0, Math.PI * 2);
         ctx.stroke();
+
+        // Expanding inner secondary feedback ring for high-velocity collision visual impact
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(sw.x, sw.y, Math.max(0, sw.radius * 0.65), 0, Math.PI * 2);
+        ctx.stroke();
+
         ctx.globalAlpha = 1.0;
       });
 
@@ -205,7 +229,7 @@ export default function GameCanvas({
         }
       });
 
-      // Draw Particles with Bloom, Core, Symbol, and Diagnostic Micro-labels
+      // Draw Particles with Bloom, Core, Symbol, and Phase Cues
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
 
@@ -229,6 +253,43 @@ export default function GameCanvas({
         ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
         ctx.fill();
 
+        // Phase Cues
+        if (p.state === 'solid') {
+          // Hexagonal crystalline outline
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          for (let i = 0; i < 6; i++) {
+            const angle = (i * Math.PI) / 3;
+            const hx = p.x + Math.cos(angle) * (p.radius + 3);
+            const hy = p.y + Math.sin(angle) * (p.radius + 3);
+            if (i === 0) ctx.moveTo(hx, hy);
+            else ctx.lineTo(hx, hy);
+          }
+          ctx.closePath();
+          ctx.stroke();
+        } else if (p.state === 'liquid') {
+          // Cohesive surface tether ring
+          ctx.strokeStyle = 'rgba(56, 189, 248, 0.5)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.radius + 2, 0, Math.PI * 2);
+          ctx.stroke();
+        } else if (p.state === 'plasma') {
+          // Pulsing electric arcs
+          ctx.strokeStyle = '#FACC15';
+          ctx.lineWidth = 1.5;
+          for (let a = 0; a < 3; a++) {
+            const angle = Date.now() * 0.01 + a * 2.1;
+            const ax = p.x + Math.cos(angle) * (p.radius + 6);
+            const ay = p.y + Math.sin(angle) * (p.radius + 6);
+            ctx.beginPath();
+            ctx.moveTo(p.x, p.y);
+            ctx.lineTo(ax, ay);
+            ctx.stroke();
+          }
+        }
+
         // Crisp Symbol centered inside
         if (def) {
           ctx.fillStyle = '#07090E';
@@ -238,16 +299,31 @@ export default function GameCanvas({
           ctx.fillText(def.symbol, p.x, p.y);
         }
 
-        // Diagnostic Failure Micro-label
-        if (p.failedReason) {
-          ctx.fillStyle = '#EF4444';
-          ctx.font = '9px monospace';
-          ctx.textAlign = 'center';
-          ctx.fillText(p.failedReason, p.x, p.y - p.radius - 8);
-          p.failedReason = undefined; // clear after rendering
+        // Debug Hitbox
+        if (showDebugPhysics) {
+          ctx.strokeStyle = '#34D399';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+          ctx.stroke();
         }
       });
       ctx.restore();
+
+      // Lasso Stamp Selection Box
+      if (engine.lassoStart && engine.lassoEnd) {
+        ctx.strokeStyle = '#00F0FF';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([4, 4]);
+        const x1 = Math.min(engine.lassoStart.x, engine.lassoEnd.x);
+        const y1 = Math.min(engine.lassoStart.y, engine.lassoEnd.y);
+        const w = Math.abs(engine.lassoEnd.x - engine.lassoStart.x);
+        const h = Math.abs(engine.lassoEnd.y - engine.lassoStart.y);
+        ctx.strokeRect(x1, y1, w, h);
+        ctx.fillStyle = 'rgba(0, 240, 255, 0.08)';
+        ctx.fillRect(x1, y1, w, h);
+        ctx.setLineDash([]);
+      }
 
       // Floating Texts
       engine.floatingTexts.forEach(ft => {
@@ -268,9 +344,13 @@ export default function GameCanvas({
 
     return () => {
       cancelAnimationFrame(animId);
-      window.removeEventListener('resize', resizeCanvas);
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+      } else {
+        window.removeEventListener('resize', resizeCanvas);
+      }
     };
-  }, [engine, temp, zoom, pan, showQuantumField]);
+  }, [engine, temp, zoom, pan, showQuantumField, showDebugPhysics]);
 
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
@@ -321,19 +401,50 @@ export default function GameCanvas({
         return Math.sqrt(dx * dx + dy * dy) <= p.radius + 8;
       });
       if (found) {
+        const def = ELEMENTS[found.elementId];
+        if (def && onInspectElement) {
+          onInspectElement(def);
+        }
+      }
+    } else if (activeTool === 'eraser') {
+      const found = engine.particles.find(p => {
+        const dx = p.x - x;
+        const dy = p.y - y;
+        return Math.sqrt(dx * dx + dy * dy) <= p.radius + 8;
+      });
+      if (found) {
         engine.particles = engine.particles.filter(p => p.id !== found.id);
-        engine.addShockwave(found.x, found.y, '#EF4444');
+        engine.addShockwave(found.x, found.y, '#EF4444', 120);
+        soundEngine.playClick();
       }
     } else if (activeTool === 'laser') {
       engine.particles.forEach(p => {
         const dx = p.x - x;
         const dy = p.y - y;
-        if (Math.sqrt(dx * dx + dy * dy) < 70) {
-          p.vx += (Math.random() - 0.5) * 10;
-          p.vy += (Math.random() - 0.5) * 10;
+        if (Math.sqrt(dx * dx + dy * dy) < 80) {
+          p.vx += (Math.random() - 0.5) * 12;
+          p.vy += (Math.random() - 0.5) * 12;
         }
       });
-      engine.addShockwave(x, y, '#F59E0B');
+      engine.temp += 500;
+      engine.addShockwave(x, y, '#F59E0B', 100);
+    } else if (activeTool === 'cryo') {
+      engine.particles.forEach(p => {
+        const dx = p.x - x;
+        const dy = p.y - y;
+        if (Math.sqrt(dx * dx + dy * dy) < 80) {
+          p.vx *= 0.4;
+          p.vy *= 0.4;
+        }
+      });
+      engine.temp = Math.max(0, engine.temp - 500);
+      engine.addShockwave(x, y, '#38BDF8', 100);
+    } else if (activeTool === 'spectroscope') {
+      if (onUseSpectroscope) onUseSpectroscope();
+    } else if (activeTool === 'lasso') {
+      isLassoing.current = true;
+      engine.lassoStart = { x, y };
+      engine.lassoEnd = { x, y };
     }
   };
 
@@ -347,6 +458,10 @@ export default function GameCanvas({
     }
 
     const { x, y } = getCanvasCoords(e.clientX, e.clientY);
+
+    if (isLassoing.current) {
+      engine.lassoEnd = { x, y };
+    }
 
     if (engine.isAttracting) {
       engine.attractX = x;
@@ -365,6 +480,17 @@ export default function GameCanvas({
   };
 
   const handleMouseUp = () => {
+    if (isLassoing.current && engine.lassoStart && engine.lassoEnd) {
+      engine.saveCustomStamp('Custom Stamp', {
+        x1: engine.lassoStart.x,
+        y1: engine.lassoStart.y,
+        x2: engine.lassoEnd.x,
+        y2: engine.lassoEnd.y
+      });
+      engine.lassoStart = null;
+      engine.lassoEnd = null;
+    }
+    isLassoing.current = false;
     isDragging.current = false;
     engine.isAttracting = false;
     engine.draggedParticleId = null;

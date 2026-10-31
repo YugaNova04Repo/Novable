@@ -1,6 +1,7 @@
 import React from 'react';
 import { Play, RotateCcw, Upload, BookOpen, Power } from 'lucide-react';
 import { soundEngine } from '../game/SoundEngine';
+import NovaGenLogo from './NovaGenLogo';
 
 interface Props {
   hasSave: boolean;
@@ -26,20 +27,25 @@ export default function TitleScreen({
   onHibernate
 }: Props) {
   return (
-    <div className="relative flex flex-col items-center justify-center h-screen w-screen bg-[#07090E] text-white p-6 overflow-hidden select-none">
+    <div className="relative flex flex-col items-center justify-center h-[100dvh] w-[100dvw] bg-[#07090E] text-white p-6 overflow-hidden select-none">
       {/* Background ambient glow */}
       <div className="absolute inset-0 bg-gradient-to-tr from-cyan-950/30 via-transparent to-fuchsia-950/20 pointer-events-none" />
 
       <div className="relative z-10 max-w-xl w-full text-center space-y-8">
-        <div className="space-y-3">
+        <div className="flex flex-col items-center space-y-4">
+          <NovaGenLogo size={84} />
+
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 font-mono text-xs tracking-widest uppercase">
-            <span>Cosmic Sandbox Simulation v2.5</span>
+            <span>Cosmic Sandbox Simulation Engine</span>
+            <span className="px-1.5 py-0.5 rounded bg-cyan-500/20 font-bold text-[10px]">v0.0.4</span>
           </div>
-          <h1 className="text-5xl sm:text-6xl font-black tracking-tight bg-gradient-to-r from-cyan-400 via-fuchsia-400 to-amber-300 bg-clip-text text-transparent">
-            GENESIS
+
+          <h1 className="text-4xl sm:text-6xl font-black tracking-tight bg-gradient-to-r from-cyan-400 via-fuchsia-400 to-amber-300 bg-clip-text text-transparent">
+            NOVAGEN
           </h1>
-          <p className="text-sm sm:text-base text-white/60 font-mono">
-            The Rule Engine · From Planck Singularity to Living Biospheres
+
+          <p className="text-xs sm:text-sm text-white/70 font-mono max-w-md">
+            The Quantum & Cosmic Rule Engine · From Planck Singularity to Living Biospheres
           </p>
         </div>
 
@@ -120,7 +126,7 @@ export default function TitleScreen({
         </div>
 
         <div className="text-[11px] font-mono text-white/30">
-          100% Offline · Deterministic Physics · Zero Cloud APIs
+          NovaGen v0.0.4 · 100% Offline · High-Refresh-Rate Deterministic Engine
         </div>
       </div>
     </div>

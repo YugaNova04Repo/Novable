@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ElementDefinition } from '../game/types';
-import { X, Thermometer, Weight, Info, Magnet, Quote } from 'lucide-react';
+import { X, Thermometer, Weight, Info, Magnet, Quote, BookOpen } from 'lucide-react';
 import { soundEngine } from '../game/SoundEngine';
 import FeynmanVisualizer from './FeynmanVisualizer';
 
@@ -10,7 +10,7 @@ interface Props {
 }
 
 export default function InspectorModal({ element, onClose }: Props) {
-  const [activeTab, setActiveTab] = useState<'overview' | 'physics' | 'feynman'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'physics' | 'feynman' | 'lore'>('overview');
 
   if (!element) return null;
 
@@ -59,6 +59,12 @@ export default function InspectorModal({ element, onClose }: Props) {
             className={`px-3 py-1.5 rounded-xl transition-all shrink-0 ${activeTab === 'feynman' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40' : 'bg-white/5 text-white/60 hover:text-white'}`}
           >
             Feynman View
+          </button>
+          <button
+            onClick={() => { soundEngine.playClick(); setActiveTab('lore'); }}
+            className={`px-3 py-1.5 rounded-xl transition-all shrink-0 ${activeTab === 'lore' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' : 'bg-white/5 text-white/60 hover:text-white'}`}
+          >
+            Historical Lore
           </button>
         </div>
 
@@ -129,12 +135,34 @@ export default function InspectorModal({ element, onClose }: Props) {
               </div>
             </div>
           </div>
-        ) : (
+        ) : activeTab === 'feynman' ? (
           <div className="space-y-4">
             <FeynmanVisualizer element={element} />
             <p className="text-[11px] text-white/60 font-mono text-center">
               Quantum mechanical wave packet representation.
             </p>
+          </div>
+        ) : (
+          <div className="space-y-4 font-mono text-xs">
+            <div className="bg-white/5 border border-white/5 p-4 rounded-xl space-y-3">
+              <div className="flex items-center gap-2 text-amber-400">
+                <BookOpen size={16} />
+                <span className="font-bold">Historical Nobel & Scientific Lore</span>
+              </div>
+              <div className="space-y-2 text-white/80">
+                <div className="flex justify-between border-b border-white/5 pb-1.5">
+                  <span className="text-white/50">Discoverer:</span>
+                  <span className="font-bold text-amber-300">{element.discoverer || 'Unknown / Ancient'}</span>
+                </div>
+                <div className="flex justify-between border-b border-white/5 pb-1.5">
+                  <span className="text-white/50">Discovery Year:</span>
+                  <span className="font-bold text-cyan-300">{element.discoveryYear ? `${element.discoveryYear} CE` : 'Ancient Prehistory'}</span>
+                </div>
+              </div>
+              <p className="text-white/70 text-xs font-sans pt-2 leading-relaxed">
+                {element.historicalCitation || 'This fundamental constituent has shaped natural philosophy and modern physical sciences for generations.'}
+              </p>
+            </div>
           </div>
         )}
       </div>
