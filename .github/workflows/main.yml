@@ -28,13 +28,13 @@ jobs:
       - name: Install Dependencies
         run: npm install --legacy-peer-deps
 
-      - name: Ensure Capacitor CLI is Installed
-        run: npm install --save-dev @capacitor/cli @capacitor/android --legacy-peer-deps
+      # Ensure @capacitor/core is installed alongside cli and android
+      - name: Install Capacitor Packages
+        run: npm install @capacitor/core @capacitor/cli @capacitor/android --legacy-peer-deps
 
       - name: Build Production Bundle
         run: npm run build
 
-      # Create capacitor.config.json directly to avoid interactive CLI prompts
       - name: Create Capacitor Config
         run: |
           cat << EOF > capacitor.config.json
