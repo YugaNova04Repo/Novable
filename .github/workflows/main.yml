@@ -25,7 +25,6 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
-      # Corrected to use 'packages' instead of 'api-level' and 'build-tools'
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
         with:
@@ -57,14 +56,22 @@ jobs:
       - name: Build Android App (Capacitor/Cordova Example)
         run: npx cap sync android
 
+      # Automatically appends a resolution strategy to fix Kotlin duplicate class conflicts during build
+      - name: Fix Kotlin Version Conflicts in Gradle
+        run: |
+          echo "
+          configurations.all {
+              resolutionStrategy {
+                  force 'org.jetbrains.kotlin:kotlin-stdlib:1.8.22'
+                  force 'org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.8.22'
+                  force 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.22'
+              }
+          }" >> android/app/build.gradle
+
       - name: Build Debug APK with Gradle
         run: |
           cd android
           chmod +x gradlew
           ./gradlew assembleDebug
 
-      - name: Upload Android APK Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: android-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+      - name: Upload Android APK
