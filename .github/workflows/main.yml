@@ -34,7 +34,10 @@ jobs:
       - name: Build Production Bundle
         run: npm run build
 
-      # Added step to initialize the Android platform in the CI environment
+      # Initialize Capacitor config if missing, replacing 'com.example.app' with your desired package name if needed
+      - name: Initialize Capacitor Config
+        run: npx cap init Nova com.yuganova.nova --web-dir dist --yes
+
       - name: Add Android Platform
         run: npx cap add android
 
