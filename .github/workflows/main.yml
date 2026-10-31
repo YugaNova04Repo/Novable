@@ -25,12 +25,11 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
-      # Explicitly configure API level and build-tools to prevent sdkmanager failures
+      # Corrected to use 'packages' instead of 'api-level' and 'build-tools'
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
         with:
-          api-level: 34
-          build-tools: 34.0.0
+          packages: 'platforms;android-34 build-tools;34.0.0'
           cmdline-tools-version: latest
 
       - name: Install Dependencies
