@@ -1,4 +1,4 @@
-name: NovaGen CI/CD Build
+name: Novagen CI/CD Build
 
 on:
   push:
@@ -12,20 +12,19 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v4
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-    - name: Set up Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: 20
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
 
-    - name: Install Dependencies
-      run: npm install--legacy-peer-deps
+      - name: Install Dependencies
+        run: npm install --legacy-peer-deps
 
-    - name: Run Type Check / Lint
-      run: npm run lint
+      - name: Run Type Check / Lint
+        run: npm run lint
 
-    - name: Build Production Bundle
-      run: npm run build
-
+      - name: Build Production Bundle
+        run: npm run build
