@@ -25,9 +25,13 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
-      # Automatically setup Android SDK and accept licenses
+      # Explicitly configure API level and build-tools to prevent sdkmanager failures
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          api-level: 34
+          build-tools: 34.0.0
+          cmdline-tools-version: latest
 
       - name: Install Dependencies
         run: npm install --legacy-peer-deps
