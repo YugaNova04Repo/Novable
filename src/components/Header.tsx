@@ -1,6 +1,7 @@
 import React from 'react';
-import { Play, Pause, FastForward, RotateCcw, Volume2, VolumeX, Settings } from 'lucide-react';
+import { Play, Pause, FastForward, RotateCcw, Volume2, VolumeX, Settings, Menu, Thermometer, Gauge, BookOpen, Trophy, Sliders } from 'lucide-react';
 import { Epoch } from '../game/types';
+import { soundEngine } from '../game/SoundEngine';
 
 interface Props {
   currentEpoch: Epoch;
@@ -9,6 +10,7 @@ interface Props {
   temp: number;
   pressure: number;
   universeAge: number;
+  kineticEnergy: number;
   isPaused: boolean;
   timeWarp: number;
   muted: boolean;
@@ -17,6 +19,12 @@ interface Props {
   onClearCrucible: () => void;
   onToggleMute: () => void;
   onOpenSettings: () => void;
+  onOpenBlueprints: () => void;
+  onOpenChallenges: () => void;
+  onOpenTimeline: () => void;
+  onOpenLab: () => void;
+  onReturnToTitle: () => void;
+  onToggleEnvDeck: () => void;
 }
 
 export default function Header({
@@ -26,6 +34,7 @@ export default function Header({
   temp,
   pressure,
   universeAge,
+  kineticEnergy,
   isPaused,
   timeWarp,
   muted,
@@ -33,11 +42,16 @@ export default function Header({
   onCycleTimeWarp,
   onClearCrucible,
   onToggleMute,
-  onOpenSettings
+  onOpenSettings,
+  onOpenBlueprints,
+  onOpenChallenges,
+  onOpenTimeline,
+  onOpenLab,
+  onReturnToTitle,
+  onToggleEnvDeck
 }: Props) {
   const progress = Math.min(100, (discoveredCount / currentEpoch.requiredDiscoveries) * 100);
 
-  // Format universe age
   const formatAge = (seconds: number) => {
     if (seconds < 60) return `${Math.floor(seconds)}s`;
     if (seconds < 3600) return `${(seconds / 60).toFixed(1)}m`;
@@ -45,39 +59,87 @@ export default function Header({
   };
 
   return (
-    <header className="relative z-20 bg-[#0F141E]/80 backdrop-blur-md border-b border-white/10 px-4 py-3 flex flex-wrap items-center justify-between gap-4 text-white">
-      {/* Epoch & Progress */}
-      <div className="flex flex-col gap-1 min-w-[280px]">
-        <div className="flex items-center justify-between text-xs font-mono tracking-wider text-cyan-400">
-          <span>{currentEpoch.title}</span>
-          <span>{currentEpoch.subtitle}</span>
-        </div>
-        <div className="w-full bg-white/10 h-1.5 rounded-full overflow-hidden">
-          <div 
-            className="bg-gradient-to-r from-cyan-500 to-fuchsia-500 h-full transition-all duration-500"
-            style={{ width: `${progress}%` }}
-          />
+    <header className="relative z-20 bg-[#0F141E]/90 backdrop-blur-md border-b border-white/10 px-4 py-3 flex flex-wrap items-center justify-between gap-3 text-white">
+      {/* Left: Menu & Epoch */}
+      <div className="flex items-center gap-3">
+        <button
+          onClick={() => {
+            soundEngine.playClick();
+            onReturnToTitle();
+          }}
+          title="Return to Main Menu"
+          className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 hover:text-white transition-all"
+        >
+          <Menu size={18} />
+        </button>
+
+        <div className="flex flex-col gap-1 min-w-[240px]">
+          <div className="flex items-center justify-between text-xs font-mono tracking-wider text-cyan-400">
+            <span>{currentEpoch.title}</span>
+            <span className="text-white/50">{currentEpoch.subtitle}</span>
+          </div>
+          <div className="w-full bg-white/10 h-1.5 rounded-full overflow-hidden">
+            <div 
+              className="bg-gradient-to-r from-cyan-500 to-fuchsia-500 h-full transition-all duration-500"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
         </div>
       </div>
 
-      {/* Live Telemetry */}
-      <div className="flex items-center gap-6 bg-black/40 px-4 py-1.5 rounded-xl border border-white/5 font-mono text-xs">
-        <div className="flex flex-col">
+      {/* Middle: Interactive Telemetry Bar */}
+      <div className="flex items-center gap-4 bg-black/40 px-4 py-1.5 rounded-xl border border-white/5 font-mono text-xs flex-wrap justify-center">
+        <button
+          onClick={() => {
+            soundEngine.playClick();
+            onOpenTimeline();
+          }}
+          className="flex flex-col text-left hover:bg-white/5 px-2 py-1 rounded-lg transition-all cursor-pointer group"
+          title="Open Timeline Scrubber (Time-Rewind)"
+        >
           <span className="text-white/40 text-[10px]">TIME (T)</span>
-          <span className="text-cyan-300 font-bold">{formatAge(universeAge)}</span>
-        </div>
+          <span className="text-cyan-300 font-bold group-hover:underline">{formatAge(universeAge)}</span>
+        </button>
+        <div className="w-px h-6 bg-white/10" />
+
+        <button
+          onClick={() => {
+            soundEngine.playClick();
+            onToggleEnvDeck();
+          }}
+          className="flex items-center gap-2 hover:bg-white/5 px-2 py-1 rounded-lg transition-all cursor-pointer group"
+          title="Toggle Environmental Deck"
+        >
+          <Thermometer size={14} className="text-amber-400 group-hover:scale-110 transition-transform" />
+          <div className="flex flex-col text-left">
+            <span className="text-white/40 text-[10px]">TEMP</span>
+            <span className="font-bold text-amber-300">{temp.toLocaleString()} K</span>
+          </div>
+        </button>
+
+        <div className="w-px h-6 bg-white/10" />
+
+        <button
+          onClick={() => {
+            soundEngine.playClick();
+            onToggleEnvDeck();
+          }}
+          className="flex items-center gap-2 hover:bg-white/5 px-2 py-1 rounded-lg transition-all cursor-pointer group"
+          title="Toggle Environmental Deck"
+        >
+          <Gauge size={14} className="text-fuchsia-400 group-hover:scale-110 transition-transform" />
+          <div className="flex flex-col text-left">
+            <span className="text-white/40 text-[10px]">PRESSURE</span>
+            <span className="font-bold text-fuchsia-300">{pressure.toFixed(1)} GPa</span>
+          </div>
+        </button>
+
         <div className="w-px h-6 bg-white/10" />
         <div className="flex flex-col">
-          <span className="text-white/40 text-[10px]">TEMP</span>
-          <span className={`font-bold ${temp > 5000 ? 'text-red-400 animate-pulse' : temp < 300 ? 'text-cyan-200' : 'text-amber-300'}`}>
-            {temp.toLocaleString()} K
-          </span>
+          <span className="text-white/40 text-[10px]">KINETIC ENERGY</span>
+          <span className="text-cyan-300 font-bold">{kineticEnergy > 1000 ? `${(kineticEnergy / 1000).toFixed(1)}k` : kineticEnergy.toFixed(0)} J</span>
         </div>
-        <div className="w-px h-6 bg-white/10" />
-        <div className="flex flex-col">
-          <span className="text-white/40 text-[10px]">PRESSURE</span>
-          <span className="text-fuchsia-300 font-bold">{pressure.toFixed(1)} GPa</span>
-        </div>
+
         <div className="w-px h-6 bg-white/10" />
         <div className="flex flex-col">
           <span className="text-white/40 text-[10px]">CODEX</span>
@@ -85,8 +147,41 @@ export default function Header({
         </div>
       </div>
 
-      {/* Quick Controls */}
+      {/* Right: Quick Action Controls */}
       <div className="flex items-center gap-2">
+        <button
+          onClick={() => {
+            soundEngine.playClick();
+            onOpenBlueprints();
+          }}
+          title="Recipe Blueprints & Tech-Tree"
+          className="p-2 rounded-lg bg-white/5 border border-white/10 hover:bg-cyan-500/20 hover:text-cyan-300 text-white/70 transition-all"
+        >
+          <BookOpen size={16} />
+        </button>
+
+        <button
+          onClick={() => {
+            soundEngine.playClick();
+            onOpenChallenges();
+          }}
+          title="Sandbox Challenge Scenarios"
+          className="p-2 rounded-lg bg-white/5 border border-white/10 hover:bg-amber-500/20 hover:text-amber-300 text-white/70 transition-all"
+        >
+          <Trophy size={16} />
+        </button>
+
+        <button
+          onClick={() => {
+            soundEngine.playClick();
+            onOpenLab();
+          }}
+          title="Advanced Physics Research Lab"
+          className="p-2 rounded-lg bg-white/5 border border-white/10 hover:bg-cyan-500/20 hover:text-cyan-300 text-white/70 transition-all"
+        >
+          <Sliders size={16} />
+        </button>
+
         <button
           onClick={onTogglePause}
           title={isPaused ? "Resume" : "Pause"}
@@ -121,8 +216,11 @@ export default function Header({
         </button>
 
         <button
-          onClick={onOpenSettings}
-          title="Settings / Big Crunch"
+          onClick={() => {
+            soundEngine.playClick();
+            onOpenSettings();
+          }}
+          title="System Settings / Save"
           className="p-2 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 text-white/70 hover:text-white transition-all"
         >
           <Settings size={16} />

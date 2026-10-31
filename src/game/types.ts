@@ -13,6 +13,8 @@ export interface ElementDefinition {
   color: string;
   radius: number;
   unlockedByDefault?: boolean;
+  quote?: string;
+  quoteAuthor?: string;
 }
 
 export interface Particle {
@@ -28,17 +30,20 @@ export interface Particle {
   mass: number;
   charge: number;
   state: 'solid' | 'liquid' | 'gas' | 'plasma' | 'energy';
-  life?: number; // For temporary effects
+  life?: number;
   maxLife?: number;
+  trail?: { x: number; y: number }[];
+  failedReason?: string;
 }
 
 export interface ReactionRule {
-  inputs: string[]; // Element IDs required
+  inputs: string[];
   output: string;
   minTemp?: number;
   maxTemp?: number;
   minPressure?: number;
-  energyChange: number; // MeV or kJ
+  maxPressure?: number;
+  energyChange: number;
   description: string;
 }
 
@@ -78,3 +83,6 @@ export interface Shockwave {
   color: string;
   opacity: number;
 }
+
+export type ViewState = 'title' | 'crucible' | 'blueprints' | 'hibernation';
+export type ToolType = 'grab' | 'attractor' | 'laser' | 'spawn' | 'inspector';
